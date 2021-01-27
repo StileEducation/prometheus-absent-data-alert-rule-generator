@@ -84,6 +84,7 @@ struct PrometheusAbsentSelectorAlertRule {
     name: String,
     expr: String,
     selector_expr: String,
+    r#for: prometheus_parser::PromDuration,
 }
 
 impl Into<PrometheusRule> for PrometheusAbsentSelectorAlertRule {
@@ -125,12 +126,20 @@ impl Into<PrometheusRule> for PrometheusAbsentSelectorAlertRule {
                 "alert" => self.name,
                 // Don't alert the instant a time series is missing, give a bit of
                 // leeway.
-                "for" => "5m",
+                "for" => self.r#for.to_string(),
                 "annotations" => annotations_mapping,
                 "labels" => labels_mapping
             },
         }
     }
+}
+
+/// Representation of a Prometheus selector that contains the [PrometheusRule]
+/// that it came from and the [prometheus_parser::Selector].
+#[derive(Clone)]
+struct Selector {
+    selector: prometheus_parser::Selector,
+    rule: PrometheusRule,
 }
 
 struct Opts {
@@ -182,7 +191,7 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
     // Get a unique list of _all_ the selectors we use. They will be unique by
     // the metric name and the labels they use, spans are ignored because
     // otherwise every selector will be unique.
-    let unique_selectors: Vec<prometheus_parser::Selector> = rule_files
+    let selectors: Vec<Selector> = rule_files
         .iter()
         .flat_map(|path| {
             // If the output file is already there ignore it. We're going to
@@ -235,39 +244,21 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
                 }
             }
         })
-        .unique_by(|selector| {
-            // Get unique selectors but don't care about the spans in anything.
-            // `get_selectors_in_file` et al. don't bother uniquifying anything
-            // because we'll need to do it here anyway as this is the first
-            // place that selectors from other files meet. `unique_by` maintains
-            // the order of elements in the iterator so as long as the order of
-            // `rule_files` is stable across runs the order of `unique_labels`
-            // won't change.
-            let labels: Vec<(String, String, String)> = selector
-                .labels
-                .iter()
-                .map(|label| (label.key.clone(), label.op.to_string(), label.value.clone()))
-                .collect();
-            (selector.metric.clone(), labels)
-        })
+        .collect();
+    let grouped_selectors: Vec<(String, Vec<Selector>)> = selectors
+        .iter()
+        .group_by(|selector| selector.selector.metric.clone().unwrap_or_default())
+        .into_iter()
+        .map(|(group_name, group)| (group_name, group.cloned().collect()))
         .collect();
     log::info!(
         "Found {} unique labels in {} files",
-        unique_selectors.len(),
+        grouped_selectors.len(),
         rule_files.len()
     );
-    let absent_alert_rules = unique_selectors
+    let absent_alert_rules = grouped_selectors
         .iter()
-        .map(|selector| {
-            let name = build_absent_selector_alert_name(selector);
-            let function = wrap_selector_in_absent(&selector);
-            PrometheusAbsentSelectorAlertRule {
-                name,
-                expr: function.to_string(),
-                selector_expr: selector.to_string(),
-            }
-            .into()
-        })
+        .map(|(_metric, selectors)| merge_selectors_into_rule(selectors))
         .collect();
     let config = PrometheusRulesConfig {
         groups: vec![PrometheusRuleGroup {
@@ -282,6 +273,58 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
     ensure!(!failure, "Failure at some point during the generation process. See logs above for more details. Config file not being written out.");
     write_generated_config_to_file(output_file, &config)?;
     Ok(())
+}
+
+/// Merge the given [Selector]s into a [PrometheusRule].
+///
+/// This is where the logic for adopting certain attributes from the selector
+/// origin rules is contained. Currently we only adopt the longest "for" from
+/// the given selectors and default to 1h if it is not provided.
+fn merge_selectors_into_rule(selectors: &[Selector]) -> PrometheusRule {
+    let name = build_absent_selector_alert_name(&selectors.first().unwrap().selector);
+    let function = wrap_selector_in_absent(&selectors.first().unwrap().selector);
+    let longest_for = selectors
+        .iter()
+        .flat_map(|s| {
+            s.rule
+                .untyped_fields
+                .get("for")
+                .and_then(|val| val.as_str())
+                .and_then(|duration| {
+                    if duration.len() < 2 {
+                        log::error!(
+                            "Malformed duration, expected at least two characters, found '{}'",
+                            duration
+                        );
+                        return None;
+                    }
+                    let unit = duration[duration.len() - 1..].into();
+                    match duration[0..duration.len() - 1].parse() {
+                        Ok(value) => {
+                            match prometheus_parser::PromDuration::from_pair(unit, value) {
+                                Ok(duration) => Some(duration),
+                                Err(e) => {
+                                    log::error!("Invalid duration {}{}: {}", value, unit, e);
+                                    None
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Invalid 'for' field '{}': {}", duration, e);
+                            None
+                        }
+                    }
+                })
+        })
+        .max();
+    let chosen_for = longest_for.unwrap_or(prometheus_parser::PromDuration::Hours(1));
+    PrometheusAbsentSelectorAlertRule {
+        name,
+        expr: function.to_string(),
+        selector_expr: selectors.first().unwrap().selector.to_string(),
+        r#for: chosen_for,
+    }
+    .into()
 }
 
 /// Build the alert name for a selector.
@@ -337,22 +380,27 @@ fn write_generated_config_to_file<P: AsRef<Path>, C: Serialize>(path: P, config:
     Ok(fs::write(path, contents)?)
 }
 
-fn get_selectors_in_file<P: AsRef<Path>>(
-    rules_path: P,
-) -> Result<Vec<prometheus_parser::Selector>> {
+fn get_selectors_in_file<P: AsRef<Path>>(rules_path: P) -> Result<Vec<Selector>> {
     let config = load_rules_from_file(rules_path)?;
     let selectors = config
         .groups
         .iter()
         .flat_map(|group| {
             group.rules.iter().flat_map(|rule| {
-                let mut selectors = match prometheus_parser::parse_expr(&rule.expr) {
-                    Ok(expr) => get_selectors_from_expression(&expr),
-                    Err(e) => {
-                        log::error!("Failed to parse expression '{}': {}", rule.expr, e);
-                        vec![]
+                let mut selectors: Vec<Selector> =
+                    match prometheus_parser::parse_expr(&rule.expr) {
+                        Ok(expr) => get_selectors_from_expression(&expr),
+                        Err(e) => {
+                            log::error!("Failed to parse expression '{}': {}", rule.expr, e);
+                            vec![]
+                        }
                     }
-                };
+                    .into_iter()
+                    .map(|selector| Selector {
+                        selector,
+                        rule: rule.clone(),
+                    })
+                    .collect();
                 // Also explicitly get the recordings we've defined. Even if
                 // they're not used in other Prometheus rules they may be used
                 // in places like Grafana. We've defined them for a reason so we
@@ -362,7 +410,10 @@ fn get_selectors_in_file<P: AsRef<Path>>(
                     if let Some(record_name) = maybe_record_name {
                         match prometheus_parser::parse_expr(record_name) {
                             Ok(prometheus_parser::Expression::Selector(selector)) => {
-                                selectors.push(selector);
+                                selectors.push(Selector {
+                                    selector,
+                                    rule: rule.clone(),
+                                });
                             }
                             Ok(_) => {
                                 log::error!(
@@ -517,7 +568,7 @@ mod test {
         let actual_selectors: Vec<String> = get_selectors_in_file(file_name)
             .expect("failed to get selectors from file")
             .iter()
-            .map(|it| it.to_string())
+            .map(|it| it.selector.to_string())
             .sorted()
             .collect();
         let mut expected_selectors = vec![
@@ -589,6 +640,44 @@ mod test {
             let name = build_absent_selector_alert_name(&selector);
             assert_eq!(name, expected_name);
         }
+    }
+
+    #[test]
+    fn test_merge_selectors_into_rule() {
+        let selectors = vec![
+            Selector {
+                selector: prometheus_parser::Selector {
+                    metric: Some("some_metric".into()),
+                    ..Default::default()
+                },
+                rule: PrometheusRule {
+                    expr: "some_metric".into(),
+                    untyped_fields: btree_map! {
+                        "for" => "1h"
+                    },
+                }
+            },
+            Selector {
+                selector: prometheus_parser::Selector {
+                    metric: Some("some_metric".into()),
+                    ..Default::default()
+                },
+                rule: PrometheusRule {
+                    expr: "some_metric".into(),
+                    untyped_fields: btree_map! {
+                        "for" => "5h"
+                    },
+                }
+            }
+        ];
+        let expected_rule: PrometheusRule = PrometheusAbsentSelectorAlertRule {
+            name: "absent_some_metric".into(),
+            expr: "absent(some_metric)".into(),
+            selector_expr: "some_metric".into(),
+            r#for: prometheus_parser::PromDuration::Hours(5),
+        }.into();
+        let actual_rule = merge_selectors_into_rule(&selectors);
+        assert_eq!(actual_rule, expected_rule);
     }
 
     #[test]
