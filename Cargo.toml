@@ -1,0 +1,28 @@
+[package]
+name = "prometheus-absent-data-alert-rule-generator"
+version = "0.1.0"
+authors = ["Stile Developers <developers@stileeducation.com>"]
+edition = "2018"
+
+[workspace]
+members = [
+        "ast-explorer"
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0.120", features = ["derive"] }
+serde_yaml = "0.8.15"
+prometheus-parser = { git = "https://github.com/StileEducation/prometheus-parser-rs", branch = "master" }
+glob = "0.3.0"
+anyhow = "1.0.38"
+log = "0.4.13"
+env_logger = "0.8.2"
+pico-args = "0.4.0"
+itertools = "0.10.0"
+
+[dev-dependencies]
+pretty_assertions = "0.6.1"
+xshell = "0.1.8"
+tempfile = "3.2.0"
