@@ -1,4 +1,5 @@
 use std::{
+    cmp::max,
     collections::BTreeMap,
     fs,
     path::{self, Path},
@@ -317,7 +318,9 @@ fn merge_selectors_into_rule(selectors: &[Selector]) -> PrometheusRule {
                 })
         })
         .max();
-    let chosen_for = longest_for.unwrap_or(prometheus_parser::PromDuration::Hours(1));
+    let chosen_for = longest_for
+        .map(|duration| max(duration, prometheus_parser::PromDuration::Hours(1)))
+        .unwrap_or(prometheus_parser::PromDuration::Hours(1));
     PrometheusAbsentSelectorAlertRule {
         name,
         expr: function.to_string(),
@@ -675,6 +678,45 @@ mod test {
             expr: "absent(some_metric)".into(),
             selector_expr: "some_metric".into(),
             r#for: prometheus_parser::PromDuration::Hours(5),
+        }
+        .into();
+        let actual_rule = merge_selectors_into_rule(&selectors);
+        assert_eq!(actual_rule, expected_rule);
+    }
+
+    #[test]
+    fn test_merge_selectors_into_rule_min_1h() {
+        let selectors = vec![
+            Selector {
+                selector: prometheus_parser::Selector {
+                    metric: Some("some_metric".into()),
+                    ..Default::default()
+                },
+                rule: PrometheusRule {
+                    expr: "some_metric".into(),
+                    untyped_fields: btree_map! {
+                        "for" => "1m"
+                    },
+                },
+            },
+            Selector {
+                selector: prometheus_parser::Selector {
+                    metric: Some("some_metric".into()),
+                    ..Default::default()
+                },
+                rule: PrometheusRule {
+                    expr: "some_metric".into(),
+                    untyped_fields: btree_map! {
+                        "for" => "30s"
+                    },
+                },
+            },
+        ];
+        let expected_rule: PrometheusRule = PrometheusAbsentSelectorAlertRule {
+            name: "absent_some_metric".into(),
+            expr: "absent(some_metric)".into(),
+            selector_expr: "some_metric".into(),
+            r#for: prometheus_parser::PromDuration::Hours(1),
         }
         .into();
         let actual_rule = merge_selectors_into_rule(&selectors);
