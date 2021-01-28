@@ -331,11 +331,11 @@ fn merge_selectors_into_rule(selectors: &[SelectorWithOriginRule]) -> Prometheus
 
 /// Build the alert name for a selector.
 ///
-/// This takes the metric name and labels, and smashes them together separated
-/// by underscores and puts "absent_" in front. For complex selectors the
-/// results will _not_ be pretty but at least it'll be somewhat clear what it's
-/// for (not some random it) and will only contain allowed characters
-/// ([a-zA-Z_][a-zA-Z0-9_]*).
+/// This takes the metric name, labels, range, and offset, and smashes them
+/// together separated by underscores and puts "absent_" in front. For complex
+/// selectors the results will _not_ be pretty but at least it'll be somewhat
+/// clear what it's for (not some random id) and will only contain allowed
+/// characters ([a-zA-Z_][a-zA-Z0-9_]*).
 fn build_absent_selector_alert_name(selector: &prometheus_parser::Selector) -> String {
     let metric = if let Some(metric) = &selector.metric {
         format!("_{}", metric)
@@ -374,7 +374,12 @@ fn build_absent_selector_alert_name(selector: &prometheus_parser::Selector) -> S
     } else {
         "".into()
     };
-    format!("absent{}{}{}", metric, labels, range)
+    let offset = if let Some(offset_duration) = selector.offset {
+        format!("_offset_{}", offset_duration)
+    } else {
+        "".into()
+    };
+    format!("absent{}{}{}{}", metric, labels, range, offset)
 }
 
 /// Write out the serializable config to the provided file with a comment header
