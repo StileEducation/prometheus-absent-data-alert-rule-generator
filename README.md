@@ -1,27 +1,18 @@
-# prometheus-rule-generate
+# prometheus-absent-data-alert-rule-generator
 
-`prometheus-rule-generate` is a tool to generate Prometheus rules based on our
-existing rules. At the moment it is just used to generate alerts for missing
-data in time-series that we use in our other alerts and recordings.
+`prometheus-absent-data-alert-rule-generator` is a tool to generate alerts for
+missing data in time-series that we use in our other alerts and recordings.
 
 ## Usage
 
-This is a normal Rust project and can be managed using Cargo.
+This is a normal Rust project and can be managed using Cargo. For the most
+up-to-date usage, run:
 
 ```shell
-$ cargo run -- --help
-prometheus-absent-data-alert-rule-generator [OPTIONS] <PATH>
-
-ARGS:
-    PATH            Path to the directory containing the Prometheus rules files.
-
-OPTIONS:
-    -h, --help      Print this help information.
-    --dry-run       Dry run. Don't output the generated rules files.
-    --output-file   File to write the absent rules to. Defaults to absent.rules.yml in PATH.
+cargo run -- --help
 ```
 
-All our rules are kep in `operations/docker/prometheus/alerts/` so we can call
+All our rules are kept in `operations/docker/prometheus/alerts/` so we can call
 `prometheus-absent-data-alert-rule-generator` like so:
 
 ```shell
