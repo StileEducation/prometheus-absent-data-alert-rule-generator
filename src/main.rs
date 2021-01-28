@@ -347,7 +347,11 @@ fn build_absent_selector_alert_name(selector: &prometheus_parser::Selector) -> S
     let metric = if let Some(metric) = &selector.metric {
         format!("_{}", metric)
     } else {
-        "".into()
+        // This should never happen and I think it's a problem with
+        // prometheus_parser's data model. Just log it and make the first char
+        // something that is allowed.
+        log::error!("Found selector with no metric: '{}'", selector);
+        "_".into()
     };
     let mut labels = selector
         .labels
