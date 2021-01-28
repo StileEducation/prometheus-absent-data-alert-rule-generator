@@ -377,6 +377,7 @@ dependencies = [
  "pico-args",
  "pretty_assertions",
  "prometheus-parser 0.1.0",
+ "regex",
  "serde",
  "serde_yaml",
  "tempfile",

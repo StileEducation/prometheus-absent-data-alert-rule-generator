@@ -9,6 +9,7 @@ use std::{
 use anyhow::{ensure, Result};
 use itertools::Itertools;
 use path::PathBuf;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 
@@ -366,7 +367,11 @@ fn build_absent_selector_alert_name(selector: &prometheus_parser::Selector) -> S
                 prometheus_parser::LabelOp::RegexEqual => "regexequal",
                 prometheus_parser::LabelOp::RegexNotEqual => "regexnotequal",
             };
-            format!("{}_{}_{}", label.key, op, label.value)
+            // This regex is constant so panicing on it being incorrect is okay
+            // as it would be a developer error.
+            let not_allowed_chars_re = Regex::new("[^a-zA-Z0-9_:]").expect("invalid regex");
+            let value = not_allowed_chars_re.replace_all(&label.value, "_");
+            format!("{}_{}_{}", label.key, op, value)
         })
         .join("_");
     if !labels.is_empty() {
@@ -637,10 +642,11 @@ mod test {
     #[test]
     fn test_build_absent_selector_alert_name() {
         let expr_and_expected = vec![
-            ("stile_log_messages_logged_count{level=~\"error|fatal\",client_sent!=\"true\"}[15m]", "absent_stile_log_messages_logged_count_level_regexequal_error|fatal_client_sent_notequal_true_15m"),
+            ("stile_log_messages_logged_count{level=~\"error|fatal\",client_sent!=\"true\"}[15m]", "absent_stile_log_messages_logged_count_level_regexequal_error_fatal_client_sent_notequal_true_15m"),
             ("stack:error_log:rate15m_sum", "absent_stack:error_log:rate15m_sum"),
             ("publicapi_http_errors_5xx_count{is_load_shedding!=\"true\",is_internal_admin=\"false\",slo!=\"L3\"}[1m]", "absent_publicapi_http_errors_5xx_count_is_load_shedding_notequal_true_is_internal_admin_equal_false_slo_notequal_L3_1m"),
             ("publicapi_http_response_time_bucket[1m]", "absent_publicapi_http_response_time_bucket_1m"),
+            (r#"aws_elasticache_evictions_maximum{cache_cluster_id=~"prod-redis-shard-.*"}"#, "absent_aws_elasticache_evictions_maximum_cache_cluster_id_regexequal_prod_redis_shard___")
         ];
         for (expr, expected_name) in expr_and_expected {
             let selector = if let prometheus_parser::Expression::Selector(s) =
