@@ -1,3 +1,6 @@
+//! prometheus-absent-data-alert-rule-generator is a tool that parses all the
+//! Prometheus rules in a specified directory and generates a rules file with
+//! alerts for when any of the rules used are absent.
 use std::{
     cmp::max,
     collections::BTreeMap,
@@ -123,19 +126,6 @@ impl Into<PrometheusRule> for PrometheusAbsentSelectorAlertRule {
     }
 }
 
-/// Converting a BTreeMap to a serde_yaml::Value turns out to be a massive pain.
-/// The best I could find is converting it to an intermediate Mapping here. You
-/// can't convert a BTreeMap directly to a mapping, instead you need an Iterator
-/// with an Item type of (Value, Value). Hence the shenanigans below.
-fn btree_to_yaml_mapping<K: Into<Value> + Clone, V: Into<Value> + Clone>(
-    btree: BTreeMap<K, V>,
-) -> serde_yaml::Mapping {
-    btree
-        .into_iter()
-        .map(|(key, value)| -> (Value, Value) { (key.into(), value.into()) })
-        .collect()
-}
-
 /// Representation of a Prometheus selector that contains the [PrometheusRule]
 /// that it came from and the [prometheus_parser::Selector].
 #[derive(Clone)]
@@ -144,6 +134,8 @@ struct SelectorWithOriginRule {
     rule: PrometheusRule,
 }
 
+/// Available command line options. See [parse_options] where [pico_args] is used
+/// to parse the provided command line options into this struct.
 struct Opts {
     rules_dir: PathBuf,
     output_file: PathBuf,
@@ -493,6 +485,7 @@ fn load_rules_from_file<P: AsRef<Path>>(rules_path: P) -> Result<PrometheusRules
     Ok(config)
 }
 
+/// Parse the provided command line options into [Opts].
 fn parse_options() -> Result<Opts> {
     let mut args = pico_args::Arguments::from_env();
     if args.contains(["-h", "--help"]) {
@@ -532,6 +525,19 @@ fn wrap_selector_in_absent(selector: &prometheus_parser::Selector) -> prometheus
         "absent"
     };
     prometheus_parser::Function::new(function_name).arg(selector.clone().wrap())
+}
+
+/// Converting a BTreeMap to a serde_yaml::Value turns out to be a massive pain.
+/// The best I could find is converting it to an intermediate Mapping here. You
+/// can't convert a BTreeMap directly to a mapping, instead you need an Iterator
+/// with an Item type of (Value, Value). Hence the shenanigans below.
+fn btree_to_yaml_mapping<K: Into<Value> + Clone, V: Into<Value> + Clone>(
+    btree: BTreeMap<K, V>,
+) -> serde_yaml::Mapping {
+    btree
+        .into_iter()
+        .map(|(key, value)| -> (Value, Value) { (key.into(), value.into()) })
+        .collect()
 }
 
 #[cfg(test)]
