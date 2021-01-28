@@ -259,13 +259,13 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
             .map(|(selector, group)| (selector, group.cloned().collect()))
             .collect();
     log::info!(
-        "Found {} unique labels in {} files",
+        "Found {} unique selectors in {} files",
         grouped_selectors.len(),
         rule_files.len()
     );
     let absent_alert_rules = grouped_selectors
         .iter()
-        .map(|(_metric, selectors)| merge_selectors_into_rule(selectors))
+        .map(|(_selector, selectors)| merge_selectors_into_rule(selectors))
         .collect();
     let config = PrometheusRulesConfig {
         groups: vec![PrometheusRuleGroup {
