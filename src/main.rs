@@ -138,7 +138,7 @@ fn btree_to_yaml_mapping<K: Into<Value> + Clone, V: Into<Value> + Clone>(
 /// Representation of a Prometheus selector that contains the [PrometheusRule]
 /// that it came from and the [prometheus_parser::Selector].
 #[derive(Clone)]
-struct Selector {
+struct SelectorWithOriginRule {
     selector: prometheus_parser::Selector,
     rule: PrometheusRule,
 }
@@ -189,10 +189,8 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
         .sorted_by(|left, right| left.cmp(right))
         .collect();
 
-    // Get a unique list of _all_ the selectors we use. They will be unique by
-    // the metric name and the labels they use, spans are ignored because
-    // otherwise every selector will be unique.
-    let selectors: Vec<Selector> = rule_files
+    // Get a list of _all_ the selectors we use.
+    let selectors: Vec<SelectorWithOriginRule> = rule_files
         .iter()
         .flat_map(|path| {
             // If the output file is already there ignore it. We're going to
@@ -246,12 +244,20 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
             }
         })
         .collect();
-    let grouped_selectors: Vec<(String, Vec<Selector>)> = selectors
-        .iter()
-        .group_by(|selector| selector.selector.metric.clone().unwrap_or_default())
-        .into_iter()
-        .map(|(group_name, group)| (group_name, group.cloned().collect()))
-        .collect();
+    let grouped_selectors: Vec<(prometheus_parser::Selector, Vec<SelectorWithOriginRule>)> =
+        selectors
+            .iter()
+            .group_by(|selector| {
+                // Group by the selector but don't care about the `span` field
+                // as that will be different for everything.
+                prometheus_parser::Selector {
+                    span: None,
+                    ..selector.selector.clone()
+                }
+            })
+            .into_iter()
+            .map(|(selector, group)| (selector, group.cloned().collect()))
+            .collect();
     log::info!(
         "Found {} unique labels in {} files",
         grouped_selectors.len(),
@@ -281,7 +287,7 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
 /// This is where the logic for adopting certain attributes from the selector
 /// origin rules is contained. Currently we only adopt the longest "for" from
 /// the given selectors and default to 1h if it is not provided.
-fn merge_selectors_into_rule(selectors: &[Selector]) -> PrometheusRule {
+fn merge_selectors_into_rule(selectors: &[SelectorWithOriginRule]) -> PrometheusRule {
     let name = build_absent_selector_alert_name(&selectors.first().unwrap().selector);
     let function = wrap_selector_in_absent(&selectors.first().unwrap().selector);
     let longest_for = selectors
@@ -383,14 +389,14 @@ fn write_generated_config_to_file<P: AsRef<Path>, C: Serialize>(path: P, config:
     Ok(fs::write(path, contents)?)
 }
 
-fn get_selectors_in_file<P: AsRef<Path>>(rules_path: P) -> Result<Vec<Selector>> {
+fn get_selectors_in_file<P: AsRef<Path>>(rules_path: P) -> Result<Vec<SelectorWithOriginRule>> {
     let config = load_rules_from_file(rules_path)?;
     let selectors = config
         .groups
         .iter()
         .flat_map(|group| {
             group.rules.iter().flat_map(|rule| {
-                let mut selectors: Vec<Selector> =
+                let mut selectors: Vec<SelectorWithOriginRule> =
                     match prometheus_parser::parse_expr(&rule.expr) {
                         Ok(expr) => get_selectors_from_expression(&expr),
                         Err(e) => {
@@ -399,7 +405,7 @@ fn get_selectors_in_file<P: AsRef<Path>>(rules_path: P) -> Result<Vec<Selector>>
                         }
                     }
                     .into_iter()
-                    .map(|selector| Selector {
+                    .map(|selector| SelectorWithOriginRule {
                         selector,
                         rule: rule.clone(),
                     })
@@ -413,7 +419,7 @@ fn get_selectors_in_file<P: AsRef<Path>>(rules_path: P) -> Result<Vec<Selector>>
                     if let Some(record_name) = maybe_record_name {
                         match prometheus_parser::parse_expr(record_name) {
                             Ok(prometheus_parser::Expression::Selector(selector)) => {
-                                selectors.push(Selector {
+                                selectors.push(SelectorWithOriginRule {
                                     selector,
                                     rule: rule.clone(),
                                 });
@@ -648,7 +654,7 @@ mod test {
     #[test]
     fn test_merge_selectors_into_rule() {
         let selectors = vec![
-            Selector {
+            SelectorWithOriginRule {
                 selector: prometheus_parser::Selector {
                     metric: Some("some_metric".into()),
                     ..Default::default()
@@ -660,7 +666,7 @@ mod test {
                     },
                 },
             },
-            Selector {
+            SelectorWithOriginRule {
                 selector: prometheus_parser::Selector {
                     metric: Some("some_metric".into()),
                     ..Default::default()
@@ -687,7 +693,7 @@ mod test {
     #[test]
     fn test_merge_selectors_into_rule_min_1h() {
         let selectors = vec![
-            Selector {
+            SelectorWithOriginRule {
                 selector: prometheus_parser::Selector {
                     metric: Some("some_metric".into()),
                     ..Default::default()
@@ -699,7 +705,7 @@ mod test {
                     },
                 },
             },
-            Selector {
+            SelectorWithOriginRule {
                 selector: prometheus_parser::Selector {
                     metric: Some("some_metric".into()),
                     ..Default::default()
