@@ -278,12 +278,12 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
 /// Merge the given [Selector]s into a [PrometheusRule].
 ///
 /// This is where the logic for adopting certain attributes from the selector
-/// origin rules is contained. Currently we only adopt the longest "for" from
-/// the given selectors and default to 1h if it is not provided.
+/// origin rules is contained. Currently we do this for the "for" field, where
+/// we take the smallest "for" then use it or 1h, whichever is larger.
 fn merge_selectors_into_rule(selectors: &[SelectorWithOriginRule]) -> PrometheusRule {
     let name = build_absent_selector_alert_name(&selectors.first().unwrap().selector);
     let function = wrap_selector_in_absent(&selectors.first().unwrap().selector);
-    let longest_for = selectors
+    let shortest_for = selectors
         .iter()
         .flat_map(|s| {
             s.rule
@@ -316,8 +316,8 @@ fn merge_selectors_into_rule(selectors: &[SelectorWithOriginRule]) -> Prometheus
                     }
                 })
         })
-        .max();
-    let chosen_for = longest_for
+        .min();
+    let chosen_for = shortest_for
         .map(|duration| max(duration, prometheus_parser::PromDuration::Hours(1)))
         .unwrap_or(prometheus_parser::PromDuration::Hours(1));
     PrometheusAbsentSelectorAlertRule {
