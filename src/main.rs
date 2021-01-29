@@ -704,7 +704,7 @@ mod test {
             name: "absent_some_metric".into(),
             expr: "absent(some_metric)".into(),
             selector_expr: "some_metric".into(),
-            r#for: prometheus_parser::PromDuration::Hours(5),
+            r#for: prometheus_parser::PromDuration::Hours(1),
         }
         .into();
         let actual_rule = merge_selectors_into_rule(&selectors);
