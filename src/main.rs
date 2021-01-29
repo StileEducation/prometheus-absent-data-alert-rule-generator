@@ -782,8 +782,8 @@ mod test {
     fn generates_no_files_on_dry_run() {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let output_file = temp_file().expect("failed to get temp file");
-        process_rules_dir(&format!("{}/fixtures", manifest_dir), &output_file, true)
-            .expect("failed to process fixtures");
+        process_rules_dir(&format!("{}/alerts", manifest_dir), &output_file, true)
+            .expect("failed to process alerts");
         let generated_files =
             glob::glob(&format!("{}/*", output_file)).expect("failed to glob temp dir");
         assert_eq!(generated_files.count(), 0);
@@ -794,11 +794,11 @@ mod test {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let output_file = temp_file().expect("failed to get temp file");
         process_rules_dir(
-            format!("{}/fixtures", manifest_dir),
+            format!("{}/alerts", manifest_dir),
             output_file.clone(),
             false,
         )
-        .expect("failed to process fixtures");
+        .expect("failed to process alerts");
         cmd!("promtool check rules {output_file}")
             .run()
             .expect("promtool check failed");
@@ -806,7 +806,7 @@ mod test {
 
     #[test]
     fn outputs_rules_in_the_same_order() {
-        let fixtures_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures");
+        let fixtures_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/alerts");
         let output_file = temp_file().expect("failed to get temp file");
         process_rules_dir(fixtures_dir, &output_file, false).expect("failed to process fixtures");
         let second_output_file = temp_file().expect("failed to get temp file");

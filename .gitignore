@@ -1,3 +1,2 @@
 target/
-fixtures/
-!fixtures/test_get_selectors_from_file.yml
+alerts/
