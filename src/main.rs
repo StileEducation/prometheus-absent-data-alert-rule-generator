@@ -134,6 +134,22 @@ struct SelectorWithOriginRule {
     rule: PrometheusRule,
 }
 
+impl SelectorWithOriginRule {
+    /// Key to sort and group [SelectorWithOriginRule] by.
+    ///
+    /// It is just the string representation of the selector's
+    /// [prometheus_parser::Selector] as it is something that we want to
+    /// eventually be unique and already implements ord.
+    fn sort_key(&self) -> String {
+        // Don't care about the `span` field
+        // as that will be different for everything.
+        prometheus_parser::Selector {
+            span: None,
+            ..self.selector.clone()
+        }.to_string()
+    }
+}
+
 /// Available command line options. See [parse_options] where [pico_args] is used
 /// to parse the provided command line options into this struct.
 struct Opts {
@@ -237,20 +253,13 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
             }
         })
         .collect();
-    let grouped_selectors: Vec<(prometheus_parser::Selector, Vec<SelectorWithOriginRule>)> =
-        selectors
-            .iter()
-            .group_by(|selector| {
-                // Group by the selector but don't care about the `span` field
-                // as that will be different for everything.
-                prometheus_parser::Selector {
-                    span: None,
-                    ..selector.selector.clone()
-                }
-            })
-            .into_iter()
-            .map(|(selector, group)| (selector, group.cloned().collect()))
-            .collect();
+    let grouped_selectors: Vec<(String, Vec<SelectorWithOriginRule>)> = selectors
+        .iter()
+        .sorted_by_key(|selector| selector.sort_key())
+        .group_by(|selector| selector.sort_key())
+        .into_iter()
+        .map(|(selector, group)| (selector, group.cloned().collect()))
+        .collect();
     log::info!(
         "Found {} unique selectors in {} files",
         grouped_selectors.len(),
