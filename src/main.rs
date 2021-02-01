@@ -828,11 +828,4 @@ mod test {
             fs::read_to_string(second_output_file).expect("failed to read second output file");
         assert_eq!(output_file_contents, second_output_file_contents);
     }
-
-    #[test]
-    fn is_formatted_correctly() {
-        cmd!("cargo fmt -- --check")
-            .run()
-            .expect("rustfmt check failed");
-    }
 }
