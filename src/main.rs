@@ -146,7 +146,8 @@ impl SelectorWithOriginRule {
         prometheus_parser::Selector {
             span: None,
             ..self.selector.clone()
-        }.to_string()
+        }
+        .to_string()
     }
 }
 
