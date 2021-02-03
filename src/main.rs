@@ -25,7 +25,8 @@ ARGS:
 OPTIONS:
     -h, --help      Print this help information.
     --dry-run       Dry run. Don't output the generated rules files.
-    --output-file   File to write the absent rules to. Defaults to absent.rules.yml in PATH.
+    --output-file   File to write the absent rules to. Defaults to absent.rules.yml in <PATH>.
+    --ignore-file   Path to the file with a list of metrics to ignore.
 ";
 
 /// A little helper for making [BTreeMap]'s nicer to write. This lets you use
@@ -157,12 +158,18 @@ struct Opts {
     rules_dir: PathBuf,
     output_file: PathBuf,
     dry_run: bool,
+    ignore_file: PathBuf,
 }
 
 fn main() -> Result<()> {
     env_logger::init();
     let opts = parse_options()?;
-    process_rules_dir(opts.rules_dir, opts.output_file, opts.dry_run)?;
+    process_rules_dir(
+        opts.rules_dir,
+        opts.output_file,
+        opts.ignore_file,
+        opts.dry_run,
+    )?;
     Ok(())
 }
 
@@ -171,7 +178,12 @@ fn main() -> Result<()> {
 ///
 /// This just wraps things up so we can easily call them in a unit test, [main]
 /// just passes through the command line options.
-fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool) -> Result<()> {
+fn process_rules_dir<P: AsRef<Path>>(
+    rules_dir: P,
+    output_file: P,
+    ignore_file: P,
+    dry_run: bool,
+) -> Result<()> {
     log::debug!(
         "Reading rules from {}, outputting rules to {}",
         rules_dir.as_ref().display(),
@@ -181,6 +193,9 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
         log::info!("This is a dry run, no files will be generated");
     }
     let rules_file_matcher = format!("{}/**/*.rules.yml", rules_dir.as_ref().display());
+    let metrics_to_ignore: Vec<String> = fs::read_to_string(ignore_file)
+        .map(|contents| contents.lines().map(|l| l.to_string()).collect())
+        .unwrap_or_default();
 
     // We only want to write the file out if all is well but it's useful to run
     // through the whole thing so we can pick up as many issues as possible in a
@@ -259,7 +274,13 @@ fn process_rules_dir<P: AsRef<Path>>(rules_dir: P, output_file: P, dry_run: bool
         .sorted_by_key(|selector| selector.sort_key())
         .group_by(|selector| selector.sort_key())
         .into_iter()
-        .map(|(selector, group)| (selector, group.cloned().collect()))
+        .filter_map(|(selector, group)| {
+            if metrics_to_ignore.contains(&selector) {
+                None
+            } else {
+                Some((selector, group.cloned().collect()))
+            }
+        })
         .collect();
     log::info!(
         "Found {} unique selectors in {} files",
@@ -510,10 +531,18 @@ fn parse_options() -> Result<Opts> {
     let dry_run = args.contains("--dry-run");
     let maybe_output_file: Option<PathBuf> = args.opt_value_from_str("--output-file")?;
     let rules_dir: PathBuf = args.free_from_str()?;
+    let ignore_file: PathBuf = args
+        .opt_value_from_str("--ignore-file")?
+        .unwrap_or_else(|| {
+            let mut path = PathBuf::new();
+            path = path.join(env!("CARGO_MANIFEST_DIR"));
+            path.join("ignore_metrics.txt")
+        });
     let opts = Opts {
         dry_run,
         output_file: maybe_output_file.unwrap_or_else(|| rules_dir.join("absent.rules.yml")),
         rules_dir,
+        ignore_file,
     };
     let remaining = args.finish();
     if !remaining.is_empty() {
@@ -792,8 +821,13 @@ mod test {
     fn generates_no_files_on_dry_run() {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let output_file = temp_file().expect("failed to get temp file");
-        process_rules_dir(&format!("{}/alerts", manifest_dir), &output_file, true)
-            .expect("failed to process alerts");
+        process_rules_dir(
+            &format!("{}/alerts", manifest_dir),
+            &output_file,
+            &"".to_string(),
+            true,
+        )
+        .expect("failed to process alerts");
         let generated_files =
             glob::glob(&format!("{}/*", output_file)).expect("failed to glob temp dir");
         assert_eq!(generated_files.count(), 0);
@@ -806,6 +840,7 @@ mod test {
         process_rules_dir(
             format!("{}/alerts", manifest_dir),
             output_file.clone(),
+            "".to_string(),
             false,
         )
         .expect("failed to process alerts");
@@ -818,9 +853,10 @@ mod test {
     fn outputs_rules_in_the_same_order() {
         let fixtures_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/alerts");
         let output_file = temp_file().expect("failed to get temp file");
-        process_rules_dir(fixtures_dir, &output_file, false).expect("failed to process fixtures");
+        process_rules_dir(fixtures_dir, &output_file, "", false)
+            .expect("failed to process fixtures");
         let second_output_file = temp_file().expect("failed to get temp file");
-        process_rules_dir(fixtures_dir, &second_output_file, false)
+        process_rules_dir(fixtures_dir, &second_output_file, "", false)
             .expect("failed to process fixtures");
         let output_file_contents =
             fs::read_to_string(output_file).expect("failed to read output file");
