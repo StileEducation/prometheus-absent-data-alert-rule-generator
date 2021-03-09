@@ -24,6 +24,6 @@ itertools = "0.10.0"
 regex = "1.4.3"
 
 [dev-dependencies]
-pretty_assertions = "0.6.1"
+pretty_assertions = "0.7.1"
 xshell = "0.1.9"
 tempfile = "3.2.0"
