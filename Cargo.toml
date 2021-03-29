@@ -16,7 +16,7 @@ serde = { version = "1.0.125", features = ["derive"] }
 serde_yaml = "0.8.17"
 prometheus-parser = { git = "https://github.com/StileEducation/prometheus-parser-rs", branch = "master" }
 glob = "0.3.0"
-anyhow = "1.0.39"
+anyhow = "1.0.40"
 log = "0.4.13"
 env_logger = "0.8.3"
 pico-args = "0.4.0"
