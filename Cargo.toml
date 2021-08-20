@@ -13,7 +13,7 @@ members = [
 
 [dependencies]
 serde = { version = "1.0.127", features = ["derive"] }
-serde_yaml = "0.8.17"
+serde_yaml = "0.8.18"
 prometheus-parser = { git = "https://github.com/StileEducation/prometheus-parser-rs", branch = "master" }
 glob = "0.3.0"
 anyhow = "1.0.42"
