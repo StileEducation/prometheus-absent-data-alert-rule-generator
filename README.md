@@ -12,15 +12,16 @@ up-to-date usage, run:
 cargo run -- --help
 ```
 
-All our rules are kept in `operations/docker/prometheus/alerts/` so we can call
-`prometheus-absent-data-alert-rule-generator` like so:
+For normal usage you just need to pass in the directory containing your
+Prometheus rules files in as the first (and only) positional argument, e.g.
 
-```shell
-cargo run -- $(git rev-parse --show-toplevel)/operations/docker/prometheus/alerts
+``` shell
+cargo run -- ./rules
 ```
 
-This will create an `absent.rules.yml` file in
-`operations/docker/prometheus/alerts`.
+This will generate an `absent.rules.yml` file in the `rules` directory
+containing all your absent alerts.
+
 
 ## Absent time-series alert generation
 
@@ -52,3 +53,15 @@ function is used because it's the range-vector equivalent of `absent`.
 
 5. Dump all the rules to `absent.rules.yml` in the input directory or to the
    specified output file.
+
+# Ignoring selectors
+
+You can ignore selectors by listing their names, one line per name, in a text
+file. By default the text file is `ignore_metrics.txt` in this directory, or you
+can use the `--ignore-file` flag to pass in your own path.
+
+# Testing
+
+Testing is done using the normal `cargo test`. The only external dependency that
+you need to have installed is `promtool` which you can get from the prometheus
+repository.
