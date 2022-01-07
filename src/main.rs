@@ -257,11 +257,7 @@ fn process_rules_dir<P: AsRef<Path>>(
                 match get_selectors_in_file(&path) {
                     Ok(selectors) => selectors,
                     Err(e) => {
-                        log::error!(
-                            "Failed to get selectors from file '{}': {}",
-                            path.display(),
-                            e
-                        );
+                        log::error!("Failed to get selectors from file: {}", e);
                         failure = true;
                         vec![]
                     }
@@ -427,60 +423,60 @@ fn write_generated_config_to_file<P: AsRef<Path>, C: Serialize>(path: P, config:
 }
 
 fn get_selectors_in_file<P: AsRef<Path>>(rules_path: P) -> Result<Vec<SelectorWithOriginRule>> {
-    let config = load_rules_from_file(rules_path)?;
-    let selectors = config
-        .groups
-        .iter()
-        .flat_map(|group| {
-            group.rules.iter().flat_map(|rule| {
-                let mut selectors: Vec<SelectorWithOriginRule> =
-                    match prometheus_parser::parse_expr(&rule.expr) {
-                        Ok(expr) => get_selectors_from_expression(&expr),
-                        Err(e) => {
-                            log::error!("Failed to parse expression '{}': {}", rule.expr, e);
-                            vec![]
+    let config = load_rules_from_file(&rules_path)?;
+    let mut selectors: Vec<SelectorWithOriginRule> = vec![];
+    let mut failed = false;
+    for group in config.groups {
+        for rule in group.rules {
+            let expr_selectors = match prometheus_parser::parse_expr(&rule.expr) {
+                Ok(expr) => get_selectors_from_expression(&expr),
+                Err(e) => {
+                    log::error!("Failed to parse expression '{}': {}", rule.expr, e);
+                    failed = true;
+                    continue;
+                }
+            };
+            let mut rule_selectors: Vec<SelectorWithOriginRule> = expr_selectors
+                .into_iter()
+                .map(|selector| SelectorWithOriginRule {
+                    selector,
+                    rule: rule.clone(),
+                })
+                .collect();
+            selectors.append(&mut rule_selectors);
+            // Also explicitly get the recordings we've defined. Even if
+            // they're not used in other Prometheus rules they may be used
+            // in places like Grafana. We've defined them for a reason so we
+            // should alert if they're missing.
+            if let Some(record_name_value) = rule.untyped_fields.get("record") {
+                let maybe_record_name = record_name_value.as_str();
+                if let Some(record_name) = maybe_record_name {
+                    match prometheus_parser::parse_expr(record_name) {
+                        Ok(prometheus_parser::Expression::Selector(selector)) => {
+                            selectors.push(SelectorWithOriginRule {
+                                selector,
+                                rule: rule.clone(),
+                            });
                         }
-                    }
-                    .into_iter()
-                    .map(|selector| SelectorWithOriginRule {
-                        selector,
-                        rule: rule.clone(),
-                    })
-                    .collect();
-                // Also explicitly get the recordings we've defined. Even if
-                // they're not used in other Prometheus rules they may be used
-                // in places like Grafana. We've defined them for a reason so we
-                // should alert if they're missing.
-                if let Some(record_name_value) = rule.untyped_fields.get("record") {
-                    let maybe_record_name = record_name_value.as_str();
-                    if let Some(record_name) = maybe_record_name {
-                        match prometheus_parser::parse_expr(record_name) {
-                            Ok(prometheus_parser::Expression::Selector(selector)) => {
-                                selectors.push(SelectorWithOriginRule {
-                                    selector,
-                                    rule: rule.clone(),
-                                });
-                            }
-                            Ok(_) => {
-                                log::error!(
-                                    "Expected record name '{}' to be a selector",
-                                    record_name
-                                );
-                            }
-                            Err(e) => {
-                                log::error!(
-                                    "Failed to parse selector name '{}': {}",
-                                    record_name,
-                                    e
-                                )
-                            }
+                        Ok(_) => {
+                            log::error!("Expected record name '{}' to be a selector", record_name);
+                            failed = true;
+                        }
+                        Err(e) => {
+                            log::error!("Failed to parse selector name '{}': {}", record_name, e);
+                            failed = true;
                         }
                     }
                 }
-                selectors
-            })
-        })
-        .collect();
+            }
+        }
+    }
+    if failed {
+        anyhow::bail!(
+            "There was a failure getting selectors from {}, see logs for details.",
+            rules_path.as_ref().display()
+        )
+    }
     Ok(selectors)
 }
 
