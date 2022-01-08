@@ -4,11 +4,6 @@ version = "0.1.0"
 authors = ["Stile Developers <developers@stileeducation.com>"]
 edition = "2018"
 
-[workspace]
-members = [
-        "ast-explorer"
-]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
