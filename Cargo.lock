@@ -25,13 +25,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61604a8f862e1d5c3229fdd78f8b02c68dcf73a4c4b05fd636d12240aaa242c1"
 
 [[package]]
-name = "ast-explorer"
-version = "0.1.0"
-dependencies = [
- "prometheus-parser 0.4.0",
-]
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -132,9 +125,12 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "enquote"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ec878a5d2f3b6e9eaee72373dd23414cfc7d353104741471bec712ef241a66e"
+checksum = "06c36cb11dbde389f4096111698d8b567c0720e3452fd5ac3e6b4e47e1939932"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "env_logger"
@@ -286,23 +282,21 @@ dependencies = [
 
 [[package]]
 name = "pest_consume"
-version = "1.0.6"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f06d200abe3be440ee3be3dcd2a65518250c0181364a332fa334b35152cb82e"
+checksum = "dcb7c2ab7ca422b1f9b9e821c96667dc6675885c8a986cb379f7fac36b229085"
 dependencies = [
  "pest",
  "pest_consume_macros",
  "pest_derive",
- "proc-macro-hack",
 ]
 
 [[package]]
 name = "pest_consume_macros"
-version = "1.0.6"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "466dea9184791ec0b5304cc103dcbd3f267b0157aa60b2efc74ea1b1c886ea51"
+checksum = "9d8630a7a899cb344ec1c16ba0a6b24240029af34bdc0a21f84e411d7f793f29"
 dependencies = [
- "proc-macro-hack",
  "proc-macro2",
  "quote",
  "syn",
@@ -367,12 +361,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-hack"
-version = "0.5.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -392,7 +380,7 @@ dependencies = [
  "log",
  "pico-args",
  "pretty_assertions",
- "prometheus-parser 0.1.0",
+ "prometheus-parser",
  "regex",
  "serde",
  "serde_yaml",
@@ -403,21 +391,7 @@ dependencies = [
 [[package]]
 name = "prometheus-parser"
 version = "0.1.0"
-source = "git+https://github.com/StileEducation/prometheus-parser-rs?branch=master#22735456993b84508f64bbb0c541d96e3d14f908"
-dependencies = [
- "enquote",
- "lazy_static",
- "pest",
- "pest_consume",
- "pest_consume_macros",
- "pest_derive",
-]
-
-[[package]]
-name = "prometheus-parser"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49bff4b8695a3142c2ceeea2af4d25fec17af750892dc4ce20be90fb4463ce5c"
+source = "git+https://github.com/StileEducation/prometheus-parser-rs?branch=master#fee5984b67d136e545fda31193b363da50291e6c"
 dependencies = [
  "enquote",
  "lazy_static",
@@ -587,6 +561,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "thiserror"
+version = "1.0.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "854babe52e4df1653706b98fcfc05843010039b406875930a70e4d9644e5c417"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa32fd3f627f367fe16f893e2597ae3c05020f8bba2666a4e6ea73d377e5714b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
