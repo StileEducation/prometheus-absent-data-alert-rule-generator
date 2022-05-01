@@ -26,7 +26,7 @@ OPTIONS:
     -h, --help      Print this help information.
     --dry-run       Dry run. Don't output the generated rules files.
     --output-file   File to write the absent rules to. Defaults to absent.rules.yml in <PATH>.
-    --ignore-file   Path to the file with a list of metrics to ignore.
+    --ignore-file   Path to the file with a list of metrics to ignore. Defaults to ignore_metrics.txt in cargo path.
 ";
 
 /// A little helper for making [BTreeMap]'s nicer to write. This lets you use
@@ -196,6 +196,7 @@ fn process_rules_dir<P: AsRef<Path>>(
     let metrics_to_ignore: Vec<String> = fs::read_to_string(ignore_file)
         .map(|contents| contents.lines().map(|l| l.to_string()).collect())
         .unwrap_or_default();
+    log::debug!("Ignoring these metrics {:?}", metrics_to_ignore);
 
     // We only want to write the file out if all is well but it's useful to run
     // through the whole thing so we can pick up as many issues as possible in a
@@ -526,7 +527,6 @@ fn parse_options() -> Result<Opts> {
     }
     let dry_run = args.contains("--dry-run");
     let maybe_output_file: Option<PathBuf> = args.opt_value_from_str("--output-file")?;
-    let rules_dir: PathBuf = args.free_from_str()?;
     let ignore_file: PathBuf = args
         .opt_value_from_str("--ignore-file")?
         .unwrap_or_else(|| {
@@ -534,6 +534,7 @@ fn parse_options() -> Result<Opts> {
             path = path.join(env!("CARGO_MANIFEST_DIR"));
             path.join("ignore_metrics.txt")
         });
+    let rules_dir: PathBuf = args.free_from_str()?;
     let opts = Opts {
         dry_run,
         output_file: maybe_output_file.unwrap_or_else(|| rules_dir.join("absent.rules.yml")),
