@@ -1,0 +1,5 @@
+# NOTE: spot fixing this in advance of our global upgrade to 1.66.0. Plan is to
+# have a single root level `rust-toolchain.toml` so this file can be deleted
+# once upgrade is done.
+[toolchain]
+channel = "1.75.0"
