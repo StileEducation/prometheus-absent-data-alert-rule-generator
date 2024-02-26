@@ -1,0 +1,25 @@
+name: CI
+on:
+    pull_request:
+jobs:
+    ci:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+            - name: Setup
+              run: |
+                  curl -L -o prometheus.tar.gz https://github.com/prometheus/prometheus/releases/download/v2.50.0/prometheus-2.50.0.linux-amd64.tar.gz
+                  mkdir -p prometheus
+                  tar -xzvf prometheus.tar.gz -C prometheus --strip-components=1
+                  mv prometheus/promtool /usr/local/bin/promtool
+                  rustup update
+                  rustup component add rustfmt clippy
+            - name: rustfmt
+              run: cargo fmt -- --check
+            - name: clippy
+              run: cargo clippy --all-targets -- --deny warnings
+            - name: Test
+              run: cargo test
