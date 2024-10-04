@@ -543,7 +543,7 @@ fn load_ignore_file<P: AsRef<Path>>(ignore_file: P) -> Result<Vec<String>> {
     let ignore_lines = contents
         .lines()
         .map(|l| l.to_string())
-        .filter(|l| l.trim().chars().nth(0) != Some('#'))
+        .filter(|l| !l.trim().starts_with('#'))
         .collect();
     Ok(ignore_lines)
 }
