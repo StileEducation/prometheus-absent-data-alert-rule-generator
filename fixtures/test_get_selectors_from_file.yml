@@ -7,6 +7,6 @@ groups:
             expr: >
                 sum by (hostname,cpu,box_type, stack_id) (
                     rate(
-                        node_cpu{mode!="idle"}[1m]
+                        node_cpu_seconds_total{mode!="idle"}[1m]
                     )
                 )
