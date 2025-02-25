@@ -354,7 +354,8 @@ fn merge_selectors_into_rule(
         .map(|duration| max(duration, prometheus_parser::PromDuration::Hours(1)))
         .unwrap_or(prometheus_parser::PromDuration::Hours(1));
     let mut labels: BTreeMap<String, String> = btree_map! {
-            "severity" => "business_hours_page"
+            "severity" => "business_hours_page",
+            "how_much_should_you_panic" => "Not much (1/3)"
     };
     if let Some(playbook_link) = playbook_link {
         labels.insert("playbook".to_string(), playbook_link);
@@ -774,7 +775,8 @@ mod test {
             selector_expr: "some_metric".into(),
             r#for: prometheus_parser::PromDuration::Hours(1),
             labels: btree_map! {
-                "severity" => "business_hours_page"
+                "severity" => "business_hours_page",
+                "how_much_should_you_panic" => "Not much (1/3)"
             },
         }
         .into();
@@ -818,6 +820,7 @@ mod test {
             r#for: prometheus_parser::PromDuration::Hours(1),
             labels: btree_map! {
                 "severity" => "business_hours_page",
+                "how_much_should_you_panic" => "Not much (1/3)",
                 "playbook" => "test"
             },
         }
@@ -834,7 +837,8 @@ mod test {
             name: "this_thing".into(),
             selector_expr: "some_expr".into(),
             labels: btree_map! {
-                "severity" => "business_hours_page"
+                "severity" => "business_hours_page",
+                "how_much_should_you_panic" => "Not much (1/3)"
             },
         }
         .into();
@@ -843,7 +847,8 @@ mod test {
             "summary" => "No data for 'some_expr'"
         };
         let labels: BTreeMap<String, String> = btree_map! {
-            "severity" => "business_hours_page"
+            "severity" => "business_hours_page",
+            "how_much_should_you_panic" => "Not much (1/3)"
         };
         let expected_rule = PrometheusRule {
             expr: "absent(some_expr)".into(),
