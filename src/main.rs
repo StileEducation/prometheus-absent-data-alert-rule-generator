@@ -28,6 +28,7 @@ OPTIONS:
     --output-file   File to write the absent rules to. Defaults to absent.rules.yml in <PATH>.
     --ignore-file   Path to the file with a list of metrics to ignore. Defaults to ignore_metrics.txt in cargo path.
     --playbook-link Link to the playbook to associate with all generated alerts. If not provided no playbook is associated.
+    --eval-interval The interval at which rules will be evaluate. If not provided then this will not be configured and your Prometheus default will be used.
 ";
 
 /// A little helper for making [BTreeMap]'s nicer to write. This lets you use
@@ -58,6 +59,8 @@ macro_rules! btree_map {
 /// Top level of Prometheus rules files.
 #[derive(Deserialize, Serialize, Debug)]
 struct PrometheusRulesConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    interval: Option<String>,
     groups: Vec<PrometheusRuleGroup>,
 }
 
@@ -157,6 +160,7 @@ struct Opts {
     dry_run: bool,
     ignore_file: PathBuf,
     playbook_link: Option<String>,
+    eval_interval: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -167,6 +171,7 @@ fn main() -> Result<()> {
         opts.output_file,
         Some(opts.ignore_file),
         opts.playbook_link,
+        opts.eval_interval,
         opts.dry_run,
     )?;
     Ok(())
@@ -182,6 +187,7 @@ fn process_rules_dir<P: AsRef<Path>>(
     output_file: P,
     ignore_file: Option<P>,
     playbook_link: Option<String>,
+    eval_interval: Option<String>,
     dry_run: bool,
 ) -> Result<()> {
     log::debug!(
@@ -291,6 +297,7 @@ fn process_rules_dir<P: AsRef<Path>>(
         .map(|(_selector, selectors)| merge_selectors_into_rule(selectors, playbook_link.clone()))
         .collect();
     let config = PrometheusRulesConfig {
+        interval: eval_interval,
         groups: vec![PrometheusRuleGroup {
             name: "absent_label_alerts".into(),
             rules: absent_alert_rules,
@@ -566,6 +573,7 @@ fn parse_options() -> Result<Opts> {
             path.join("ignore_metrics.txt")
         });
     let playbook_link = args.opt_value_from_str("--playbook-link")?;
+    let eval_interval = args.opt_value_from_str("--eval-interval")?;
     let rules_dir: PathBuf = args.free_from_str()?;
     let opts = Opts {
         dry_run,
@@ -573,6 +581,7 @@ fn parse_options() -> Result<Opts> {
         rules_dir,
         ignore_file,
         playbook_link,
+        eval_interval,
     };
     let remaining = args.finish();
     if !remaining.is_empty() {
@@ -863,12 +872,46 @@ mod test {
     }
 
     #[test]
+    fn test_include_interval_if_specified() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let output_file = temp_file().expect("failed to get temp file");
+        process_rules_dir(
+            format!("{}/alerts", manifest_dir),
+            output_file.clone(),
+            None,
+            None,
+            Some("10m".to_string()),
+            false,
+        )
+        .expect("failed to process alerts");
+        let config = load_rules_from_file(&output_file).expect("failed to load config");
+        assert_eq!(config.interval, Some("10m".to_string()));
+    }
+
+    #[test]
+    fn test_exclude_interval_if_specified() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let output_file = temp_file().expect("failed to get temp file");
+        process_rules_dir(
+            format!("{}/alerts", manifest_dir),
+            output_file.clone(),
+            None,
+            None,
+            None,
+            false,
+        )
+        .expect("failed to process alerts");
+        let config = load_rules_from_file(&output_file).expect("failed to load config");
+        assert_eq!(config.interval, None);
+    }
+    #[test]
     fn generates_no_files_on_dry_run() {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let output_file = temp_file().expect("failed to get temp file");
         process_rules_dir(
             &format!("{}/alerts", manifest_dir),
             &output_file,
+            None,
             None,
             None,
             true,
@@ -888,6 +931,7 @@ mod test {
             output_file.clone(),
             None,
             None,
+            Some("10m".to_string()),
             false,
         )
         .expect("failed to process alerts");
@@ -901,10 +945,10 @@ mod test {
     fn outputs_rules_in_the_same_order() {
         let fixtures_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/alerts");
         let output_file = temp_file().expect("failed to get temp file");
-        process_rules_dir(fixtures_dir, &output_file, None, None, false)
+        process_rules_dir(fixtures_dir, &output_file, None, None, None, false)
             .expect("failed to process fixtures");
         let second_output_file = temp_file().expect("failed to get temp file");
-        process_rules_dir(fixtures_dir, &second_output_file, None, None, false)
+        process_rules_dir(fixtures_dir, &second_output_file, None, None, None, false)
             .expect("failed to process fixtures");
         let output_file_contents =
             fs::read_to_string(output_file).expect("failed to read output file");
